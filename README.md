@@ -68,6 +68,8 @@ Generate DBML for a single model:
 python manage.py dbml billing.Invoice
 ```
 
+By default, the generated DBML uses physical table names such as `public.account_emailconfirmation` so the output stays close to Django's actual schema.
+
 When you target a specific app or model, `django-dbml` also includes the forward-related tables needed to keep the schema usable.
 
 ## Command Reference
@@ -83,7 +85,9 @@ Supported options:
 - `--output_file PATH`
   Write the generated DBML to a file instead of stdout.
 - `--table_names`
-  Use the underlying database table names instead of Django model labels such as `app_label.ModelName`.
+  Use the underlying database table names. This is the default behavior.
+- `--model_labels`
+  Use Django model labels such as `app_label.ModelName` instead of physical table names.
 - `--group_by_app`
   Add `TableGroup` blocks grouped by app/module.
 - `--color_by_app`
@@ -121,10 +125,10 @@ python manage.py dbml billing.Invoice billing.InvoiceLine
 python manage.py dbml --output_file docs/schema.dbml
 ```
 
-### Use physical table names instead of model labels
+### Use Django model labels instead of physical table names
 
 ```bash
-python manage.py dbml --table_names
+python manage.py dbml --model_labels
 ```
 
 ### Add project metadata
@@ -144,20 +148,15 @@ python manage.py dbml --group_by_app --color_by_app
 
 ## How Metadata Is Mapped
 
-`django-dbml` extracts useful schema notes from Django metadata when available.
+`django-dbml` defaults to database-oriented output and only emits notes for database comments.
 
 Model-level metadata:
 
-- model docstrings are emitted as table notes
-- `db_table_comment` is emitted as a table note
-- when `--table_names` is not used, the DB table name is added to the note
+- `db_table_comment` is emitted as a table note when present
 
 Field-level metadata:
 
-- `help_text` is emitted as a field note
-- `verbose_name` is emitted as a field note
-- `db_comment` is emitted as a field note
-- `choices` are included in field notes without changing the physical column type
+- `db_comment` is emitted as a field note when present
 - database-driven attributes such as `null`, `unique`, primary key, and auto-increment information are included in field attributes
 
 Relationship handling:
@@ -183,12 +182,12 @@ Project "Library" {
   Last Updated At 03-30-2026 02:15PM UTC'''
 }
 
-Table library.Book {
+Table public.library_book {
   title varchar(200) [not null]
   author_id bigint [not null]
 }
 
-ref: library.Book.author_id > library.Author.id
+ref: public.library_book.author_id > public.library_author.id
 ```
 
 The exact output depends on your models, database backend, indexes, choices, and comments.

@@ -4,7 +4,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class GenerationOptions:
-    table_names: bool = False
+    table_names: bool = True
     group_by_app: bool = False
     color_by_app: bool = False
     add_project_name: str | None = None
@@ -24,7 +24,7 @@ class GenerationOptions:
     def from_command_kwargs(cls, kwargs: dict) -> "GenerationOptions":
         output_file = kwargs.get("output_file")
         return cls(
-            table_names=kwargs.get("table_names", False),
+            table_names=kwargs.get("table_names", True),
             group_by_app=kwargs.get("group_by_app", False),
             color_by_app=kwargs.get("color_by_app", False),
             add_project_name=kwargs.get("add_project_name"),
