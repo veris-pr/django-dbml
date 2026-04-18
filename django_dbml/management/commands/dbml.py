@@ -16,6 +16,7 @@ class Command(BaseCommand):
         parser.set_defaults(table_names=True)
         parser.add_argument("--table_names", action="store_true", dest="table_names", help="Use underlying table names rather than model names (default)")
         parser.add_argument("--model_labels", action="store_false", dest="table_names", help="Use Django model labels such as app_label.ModelName instead of physical table names")
+        parser.add_argument("--database", nargs="?", const="default", help="Introspect schema from a configured Django database alias. If provided without a value, the 'default' alias is used.")
         parser.add_argument("--group_by_app", action="store_true")
         parser.add_argument("--color_by_app", action="store_true")
         parser.add_argument("--add_project_name", action="store", help="add name for the project")

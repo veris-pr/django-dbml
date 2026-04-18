@@ -27,6 +27,14 @@ class AuthorProxy(Author):
         proxy = True
 
 
+class Badge(models.Model):
+    code = models.CharField(max_length=12, primary_key=True)
+
+
+class BadgeAudit(models.Model):
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE)
+
+
 class Tag(models.Model):
     label = models.CharField(max_length=50)
 

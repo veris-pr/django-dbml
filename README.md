@@ -50,6 +50,12 @@ Generate DBML for all installed models:
 python manage.py dbml
 ```
 
+Generate DBML from the configured database connection:
+
+```bash
+python manage.py dbml --database
+```
+
 Write the schema to a file:
 
 ```bash
@@ -84,6 +90,8 @@ Supported options:
 
 - `--output_file PATH`
   Write the generated DBML to a file instead of stdout.
+- `--database [ALIAS]`
+  Introspect the schema from a configured Django database alias. If the option is provided without a value, the `default` alias is used.
 - `--table_names`
   Use the underlying database table names. This is the default behavior.
 - `--model_labels`
@@ -125,6 +133,18 @@ python manage.py dbml billing.Invoice billing.InvoiceLine
 python manage.py dbml --output_file docs/schema.dbml
 ```
 
+### Introspect the default database
+
+```bash
+python manage.py dbml --database
+```
+
+### Introspect a specific configured database alias
+
+```bash
+python manage.py dbml --database reporting
+```
+
 ### Use Django model labels instead of physical table names
 
 ```bash
@@ -149,6 +169,8 @@ python manage.py dbml --group_by_app --color_by_app
 ## How Metadata Is Mapped
 
 `django-dbml` defaults to database-oriented output and only emits notes for database comments.
+
+When `--database` is used, the schema is introspected from the configured Django connection for the selected alias instead of being derived from model field definitions.
 
 Model-level metadata:
 

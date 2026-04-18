@@ -3,6 +3,7 @@ from textwrap import dedent
 
 
 snake_pattern = re.compile(r"(?<!^)(?=[A-Z])")
+auto_generated_name_pattern = re.compile(r"^(?P<prefix>.+)_[0-9a-f]{8}(?P<suffix>(?:_uniq)?)$")
 
 
 def to_snake_case(value):
@@ -26,3 +27,15 @@ def choices_to_markdown_table(choices: list) -> str:
         lines.append(f"|{value}|{display}|")
 
     return "\n".join(lines)
+
+
+def clean_db_identifier(name: str) -> str:
+    return name.replace('"', "").replace("'", "")
+
+
+def simplify_generated_name(name: object) -> str:
+    normalized_name = str(name)
+    match = auto_generated_name_pattern.fullmatch(normalized_name)
+    if match is None:
+        return normalized_name
+    return f"{match.group('prefix')}{match.group('suffix')}"

@@ -2,6 +2,7 @@ from io import StringIO
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 
 pytestmark = pytest.mark.django_db
@@ -75,6 +76,43 @@ def test_dbml_command_deduplicates_proxy_models() -> None:
     assert "Table testapp_author {" in output
     assert output.count("Table testapp_author {") == 1
     assert "Table testapp.AuthorProxy {" not in output
+
+
+def test_dbml_command_can_introspect_database() -> None:
+    output = render_dbml(database="default", disable_update_timestamp=True)
+
+    assert "Generated from Django database 'default'." in output
+    assert "Table testapp_author {" in output
+    assert "Table testapp_book {" in output
+    assert "Table testapp_badge {" in output
+    assert "code varchar(12) [pk, not null]" in output
+    assert "ref: testapp_book.author_id > testapp_author.id" in output
+    assert "ref: testapp_badgeaudit.badge_id > testapp_badge.code" in output
+    assert "Stores authors" not in output
+    assert "Shown in catalogs" not in output
+
+
+def test_dbml_command_database_introspection_respects_selection() -> None:
+    output = render_dbml("testapp.Book", database="default", disable_update_timestamp=True)
+
+    assert "Table testapp_book {" in output
+    assert "Table testapp_author {" in output
+    assert "Table testapp_tag {" in output
+    assert "Table testapp_book_tags {" in output
+    assert "Table testapp_badge {" not in output
+
+
+def test_dbml_command_database_introspection_supports_model_labels() -> None:
+    output = render_dbml(database="default", table_names=False, disable_update_timestamp=True)
+
+    assert "Table testapp.Author {" in output
+    assert "Table testapp.Book {" in output
+    assert "ref: testapp.Book.author_id > testapp.Author.id" in output
+
+
+def test_dbml_command_rejects_unknown_database_alias() -> None:
+    with pytest.raises(CommandError, match="Database alias 'missing' is not configured."):
+        render_dbml(database="missing", disable_update_timestamp=True)
 
 
 def test_dbml_command_includes_related_models_for_specific_model_selection() -> None:
