@@ -21,6 +21,12 @@ class RelationDefinition:
 
 
 @dataclass(frozen=True)
+class CheckDefinition:
+    expression: str
+    name: str
+
+
+@dataclass(frozen=True)
 class IndexDefinition:
     fields: list[str]
     type: str
@@ -36,6 +42,7 @@ class FieldDefinition:
     null: bool = False
     pk: bool = False
     unique: bool = False
+    increment: bool = False
     default: Any = UNSET
 
     @property
@@ -50,6 +57,7 @@ class TableDefinition:
     color: str = ""
     fields: dict[str, FieldDefinition] = field(default_factory=dict)
     relations: list[RelationDefinition] = field(default_factory=list)
+    checks: list[CheckDefinition] = field(default_factory=list)
     indexes: list[IndexDefinition] = field(default_factory=list)
     note: str = ""
 

@@ -88,8 +88,8 @@ Recommended production release flow:
 make test
 make lint
 make build
-git tag 1.1.2
-git push origin 1.1.2
+git tag 1.1.3
+git push origin 1.1.3
 ```
 
 After the tag is pushed, the PyPI workflow publishes that version if CI passes and the tag matches the package version.

@@ -26,6 +26,15 @@ class Tag(models.Model):
     label = models.CharField(max_length=50)
 
 
+class Shelf(models.Model):
+    position = models.PositiveIntegerField()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(position__gte=1), name="testapp_shelf_position_gte_1"),
+        ]
+
+
 class Book(models.Model):
     """Catalog entry used by tests."""
 

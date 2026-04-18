@@ -11,8 +11,8 @@ from django.db.utils import DEFAULT_DB_ALIAS
 from django.utils.module_loading import import_string
 
 from django_dbml.core.options import GenerationOptions
-from django_dbml.core.schema import EnumValue, FieldDefinition, IndexDefinition, ProjectDefinition, RelationDefinition, TableDefinition
-from django_dbml.core.selection import IGNORE_RELATION_TYPES, get_model_group, select_models
+from django_dbml.core.schema import CheckDefinition, FieldDefinition, IndexDefinition, ProjectDefinition, RelationDefinition, TableDefinition
+from django_dbml.core.selection import get_model_group, select_models
 from django_dbml.utils import choices_to_markdown_table, to_snake_case
 
 
@@ -44,54 +44,53 @@ class SchemaBuilder:
         )
         project.tables[table_name] = table
 
-        for field in model._meta.get_fields():
-            if isinstance(field, IGNORE_RELATION_TYPES):
+        for field in model._meta.local_fields:
+            column_name = field.column
+            table.fields[column_name] = self.build_field_definition(field)
+            self.add_field_index(table, model, field, column_name)
+
+            if not getattr(field, "db_constraint", True):
                 continue
 
             if isinstance(field, models.fields.related.OneToOneField):
-                field_name = f"{field.name}_id"
                 table.relations.append(
                     RelationDefinition(
                         kind="one_to_one",
                         table_from=self.get_table_name(field.related_model),
-                        table_from_field=field.target_field.name,
+                        table_from_field=field.target_field.column,
                         table_to=table_name,
-                        table_to_field=field_name,
+                        table_to_field=column_name,
                     )
                 )
                 continue
 
             if isinstance(field, models.fields.related.ForeignKey):
-                field_name = f"{field.name}_id"
                 table.relations.append(
                     RelationDefinition(
                         kind="one_to_many",
                         table_from=self.get_table_name(field.related_model),
-                        table_from_field=field.target_field.name,
+                        table_from_field=field.target_field.column,
                         table_to=table_name,
-                        table_to_field=field_name,
+                        table_to_field=column_name,
                     )
                 )
-                continue
 
-            if isinstance(field, models.fields.related.ManyToManyField):
-                self._build_many_to_many_table(project, field, group_name)
-                continue
+        for field in model._meta.local_many_to_many:
+            self._build_many_to_many_table(project, field, group_name)
 
-            column_name = field.name
-            table.fields[column_name] = self.build_field_definition(project, table_name, field)
-            self.add_field_index(table, model, field, column_name)
-
+        self.add_checks(table, model)
         self.add_meta_indexes(table, model)
         self.add_table_notes(table, model)
 
     def _build_many_to_many_table(self, project: ProjectDefinition, field: Field, group_name: str) -> None:
         through_model = field.remote_field.through
-        if "_" not in through_model._meta.model_name:
+        if not through_model._meta.auto_created:
             return
 
         original_table_name = field.m2m_db_table()
-        table_name = original_table_name.replace("_", ".", 1) if "_" in original_table_name else original_table_name
+        table_name = original_table_name
+        if not self.options.table_names and "_" in original_table_name:
+            table_name = original_table_name.replace("_", ".", 1)
         if table_name in project.tables:
             return
 
@@ -104,62 +103,44 @@ class SchemaBuilder:
         if not self.options.table_names:
             table.note += f"\n\n*DB table: {original_table_name}*"
 
-        table.relations.extend(
-            [
-                RelationDefinition(
-                    kind="one_to_many",
-                    table_from=table_name,
-                    table_from_field=field.m2m_column_name(),
-                    table_to=self.get_table_name(field.model),
-                    table_to_field=field.m2m_target_field_name(),
-                ),
-                RelationDefinition(
-                    kind="one_to_many",
-                    table_from=table_name,
-                    table_from_field=field.m2m_reverse_name(),
-                    table_to=self.get_table_name(field.related_model),
-                    table_to_field=field.m2m_reverse_target_field_name(),
-                ),
-            ]
-        )
-        table.fields["id"] = FieldDefinition(type="auto", pk=True)
-        table.fields[field.m2m_reverse_name()] = FieldDefinition(type="auto")
-        table.fields[field.m2m_column_name()] = FieldDefinition(type="auto")
+        for through_field in through_model._meta.local_fields:
+            column_name = through_field.column
+            table.fields[column_name] = self.build_field_definition(through_field)
+            self.add_field_index(table, through_model, through_field, column_name)
 
-        for field_name in [field.m2m_reverse_name(), field.m2m_column_name()]:
-            table.indexes.append(
-                IndexDefinition(
-                    fields=[field_name],
-                    type="btree",
-                    name=connection.schema_editor()._create_index_name(original_table_name, [field_name]),
+            if not getattr(through_field, "db_constraint", True):
+                continue
+
+            if isinstance(through_field, models.fields.related.OneToOneField):
+                table.relations.append(
+                    RelationDefinition(
+                        kind="one_to_one",
+                        table_from=self.get_table_name(through_field.related_model),
+                        table_from_field=through_field.target_field.column,
+                        table_to=table_name,
+                        table_to_field=column_name,
+                    )
                 )
-            )
-        table.indexes.append(
-            IndexDefinition(
-                fields=["id"],
-                type="btree",
-                name=f"{original_table_name}_pkey",
-                unique=True,
-                pk=True,
-            )
-        )
-        table.indexes.append(
-            IndexDefinition(
-                fields=[field.m2m_column_name(), field.m2m_reverse_name()],
-                type="btree",
-                name=connection.schema_editor()._unique_constraint_name(
-                    original_table_name,
-                    [field.m2m_column_name(), field.m2m_reverse_name()],
-                    quote=False,
-                ),
-                unique=True,
-            )
-        )
+                continue
+
+            if isinstance(through_field, models.fields.related.ForeignKey):
+                table.relations.append(
+                    RelationDefinition(
+                        kind="one_to_many",
+                        table_from=self.get_table_name(through_field.related_model),
+                        table_from_field=through_field.target_field.column,
+                        table_to=table_name,
+                        table_to_field=column_name,
+                    )
+                )
+
+        self.add_checks(table, through_model)
+        self.add_meta_indexes(table, through_model)
 
         project.tables[table_name] = table
 
-    def build_field_definition(self, project: ProjectDefinition, table_name: str, field: Field) -> FieldDefinition:
-        field_definition = FieldDefinition(type=map_field_type_to_dbml_type(type(field)))
+    def build_field_definition(self, field: Field) -> FieldDefinition:
+        field_definition = FieldDefinition(type=self.get_dbml_field_type(field))
 
         if getattr(field, "db_comment", ""):
             field_definition.note += field.db_comment.replace('"', '\\"')
@@ -178,21 +159,20 @@ class SchemaBuilder:
         if getattr(field, "primary_key", False):
             field_definition.pk = True
 
-        if getattr(field, "unique", False):
+        if getattr(field, "unique", False) and not field_definition.pk:
             field_definition.unique = True
 
-        if getattr(field, "default", models.fields.NOT_PROVIDED) != models.fields.NOT_PROVIDED:
-            field_definition.default = field.default
-
         if getattr(field, "choices", None):
-            enum_name = self.get_enum_name(table_name, field.name, field_definition.type)
-            field_definition.type = enum_name
-            project.enums[enum_name] = [EnumValue(value=value, display=display) for value, display in field.choices]
+            field_definition.note += "\n\nChoices:"
+            field_definition.note += f"\n{choices_to_markdown_table(list(field.choices))}"
 
         if getattr(field, "base_field", None) and field.base_field.choices:
             base_field_type = map_field_type_to_dbml_type(type(field.base_field))
             field_definition.note += f"\n\nBase field choices ({base_field_type}):"
             field_definition.note += f"\n{choices_to_markdown_table(field.base_field.choices)}"
+
+        if field.get_internal_type() in {"AutoField", "BigAutoField", "SmallAutoField"}:
+            field_definition.increment = True
 
         field_definition.note = field_definition.note.strip("\n")
         return field_definition
@@ -204,7 +184,7 @@ class SchemaBuilder:
         if field.primary_key:
             index_name = f"{model._meta.db_table}_pkey"
         elif isinstance(field, models.fields.related.OneToOneField) or field.unique:
-            index_name = f"{model._meta.db_table}_{field_name}_key"
+            index_name = connection.schema_editor()._unique_constraint_name(model._meta.db_table, [field_name], quote=False)
         else:
             index_name = connection.schema_editor()._create_index_name(model._meta.db_table, [field_name])
 
@@ -213,7 +193,7 @@ class SchemaBuilder:
                 fields=[field_name],
                 type="btree",
                 name=index_name,
-                unique=field.unique,
+                unique=field.unique and not field.primary_key,
                 pk=field.primary_key,
             )
         )
@@ -237,6 +217,35 @@ class SchemaBuilder:
                     type="btree",
                     name=connection.schema_editor()._unique_constraint_name(model._meta.db_table, column_names, quote=False),
                     unique=True,
+                )
+            )
+
+    def add_checks(self, table: TableDefinition, model: type[Model]) -> None:
+        if not connection.features.supports_table_check_constraints:
+            return
+
+        schema_editor = connection.schema_editor()
+
+        for field in model._meta.local_fields:
+            check_expression = field.db_parameters(connection).get("check")
+            if not check_expression:
+                continue
+
+            table.checks.append(
+                CheckDefinition(
+                    expression=check_expression,
+                    name=f"{model._meta.db_table}_{field.column}_check",
+                )
+            )
+
+        for constraint in model._meta.constraints:
+            if not isinstance(constraint, models.CheckConstraint):
+                continue
+
+            table.checks.append(
+                CheckDefinition(
+                    expression=constraint._get_check_sql(model, schema_editor),
+                    name=constraint.name,
                 )
             )
 
@@ -295,15 +304,16 @@ class SchemaBuilder:
                     return db_for_read
         return None
 
-    def get_enum_name(self, table_name: str, field_name: str, field_type: str) -> str:
-        if "." in table_name:
-            schema_name, model_name = table_name.split(".", 1)
-        elif "_" in table_name:
-            schema_name, model_name = table_name.split("_", 1)
-        else:
-            schema_name, model_name = "public", table_name
+    def get_dbml_field_type(self, field: Field) -> str:
+        db_parameters = field.db_parameters(connection)
+        db_type = db_parameters.get("type") or field.db_type(connection)
+        if not db_type:
+            db_type = map_field_type_to_dbml_type(type(field))
 
-        return f"{schema_name}.{field_type}_{model_name}_{field_name}".lower()
+        if any(character.isspace() for character in db_type):
+            return f'"{db_type}"'
+
+        return db_type
 
 
 @cache

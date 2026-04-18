@@ -2,7 +2,7 @@ import inspect
 from datetime import UTC, datetime
 
 from django_dbml.core.options import GenerationOptions
-from django_dbml.core.schema import FieldDefinition, ProjectDefinition, RelationDefinition, TableDefinition
+from django_dbml.core.schema import CheckDefinition, FieldDefinition, ProjectDefinition, RelationDefinition, TableDefinition
 from django_dbml.utils import cleanup_docstring
 
 
@@ -61,6 +61,12 @@ class DbmlRenderer:
         for field_name, field in table.fields.items():
             blocks.append(f"  {field_name} {field.type} {self.render_field_attributes(field)}".rstrip())
 
+        if table.checks:
+            blocks.append("\n  checks {")
+            for check in table.checks:
+                blocks.append(f"    {self.render_check(check)}")
+            blocks.append("  }")
+
         if table.indexes:
             blocks.append("\n  indexes {")
             for index in sorted(table.indexes, key=lambda item: str(item.name)):
@@ -85,6 +91,9 @@ class DbmlRenderer:
 
         if field.pk:
             attributes.append("pk")
+
+        if field.increment:
+            attributes.append("increment")
 
         if field.unique:
             attributes.append("unique")
@@ -116,6 +125,9 @@ class DbmlRenderer:
         index_attributes.append(f"name: '{name}'")
         index_attributes.append(f"type: {index_type}")
         return f"({','.join(fields)}) [{', '.join(index_attributes)}]"
+
+    def render_check(self, check: CheckDefinition) -> str:
+        return f"`{check.expression}` [name: '{check.name}']"
 
     def render_relation(self, relation: RelationDefinition) -> str:
         operator = ">" if relation.kind == "one_to_many" else "-"
