@@ -22,6 +22,11 @@ class AuthorProfile(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
 
+class AuthorProxy(Author):
+    class Meta:
+        proxy = True
+
+
 class Tag(models.Model):
     label = models.CharField(max_length=50)
 

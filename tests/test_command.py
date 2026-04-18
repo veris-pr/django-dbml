@@ -69,6 +69,14 @@ def test_dbml_command_can_use_model_labels() -> None:
     assert "Table testapp_book {" not in output
 
 
+def test_dbml_command_deduplicates_proxy_models() -> None:
+    output = render_dbml("testapp.AuthorProxy", disable_update_timestamp=True)
+
+    assert "Table testapp_author {" in output
+    assert output.count("Table testapp_author {") == 1
+    assert "Table testapp.AuthorProxy {" not in output
+
+
 def test_dbml_command_includes_related_models_for_specific_model_selection() -> None:
     output = render_dbml(
         "testapp.Book",

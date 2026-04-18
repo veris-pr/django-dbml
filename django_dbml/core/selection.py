@@ -10,11 +10,17 @@ IGNORE_RELATION_TYPES = (
 )
 
 
+def normalize_model(model: type[Model]) -> type[Model]:
+    """Collapse proxy models onto their concrete database-backed model."""
+
+    return model._meta.concrete_model
+
+
 def select_models(app_labels: tuple[str, ...]) -> list[type[Model]]:
     """Return the models that should participate in generation."""
 
     if not app_labels:
-        return list(apps.get_models())
+        return include_related_models([normalize_model(model) for model in apps.get_models()])
 
     selected_models: list[type[Model]] = []
     for app_label_spec in app_labels:
@@ -26,10 +32,10 @@ def select_models(app_labels: tuple[str, ...]) -> list[type[Model]]:
             raise CommandError(str(exc)) from exc
 
         if model_label:
-            selected_models.append(app_config.get_model(model_label))
+            selected_models.append(normalize_model(app_config.get_model(model_label)))
             continue
 
-        selected_models.extend(app_config.get_models())
+        selected_models.extend(normalize_model(model) for model in app_config.get_models())
 
     return include_related_models(selected_models)
 
@@ -38,11 +44,11 @@ def include_related_models(models_to_process: list[type[Model]]) -> list[type[Mo
     """Expand a selected set of models to include their forward-related models."""
 
     collected_models: list[type[Model]] = []
-    pending_models = list(models_to_process)
+    pending_models = [normalize_model(model) for model in models_to_process]
     seen_models: set[type[Model]] = set()
 
     while pending_models:
-        model = pending_models.pop(0)
+        model = normalize_model(pending_models.pop(0))
         if model in seen_models:
             continue
 
@@ -54,15 +60,15 @@ def include_related_models(models_to_process: list[type[Model]]) -> list[type[Mo
                 continue
 
             if isinstance(field, (models.fields.related.ForeignKey, models.fields.related.OneToOneField)):
-                pending_models.append(field.related_model)
+                pending_models.append(normalize_model(field.related_model))
                 continue
 
             if isinstance(field, models.fields.related.ManyToManyField):
-                pending_models.append(field.related_model)
+                pending_models.append(normalize_model(field.related_model))
 
                 through_model = field.remote_field.through
                 if through_model is not None and not through_model._meta.auto_created:
-                    pending_models.append(through_model)
+                    pending_models.append(normalize_model(through_model))
 
     return collected_models
 
