@@ -1,5 +1,6 @@
 # ruff: noqa: SLF001
 import hashlib
+import re
 from functools import cache
 
 from django.conf import settings
@@ -12,6 +13,8 @@ from django_dbml.core.options import GenerationOptions
 from django_dbml.core.schema import CheckDefinition, FieldDefinition, IndexDefinition, ProjectDefinition, RelationDefinition, TableDefinition
 from django_dbml.core.selection import get_model_group, select_models
 from django_dbml.utils import to_snake_case
+
+AUTO_GENERATED_NAME_PATTERN = re.compile(r"^(?P<prefix>.+)_[0-9a-f]{8}(?P<suffix>(?:_uniq)?)$")
 
 
 class SchemaBuilder:
@@ -163,6 +166,7 @@ class SchemaBuilder:
             index_name = connection.schema_editor()._unique_constraint_name(model._meta.db_table, [field_name], quote=False)
         else:
             index_name = connection.schema_editor()._create_index_name(model._meta.db_table, [field_name])
+        index_name = self.simplify_generated_name(index_name)
 
         table.indexes.append(
             IndexDefinition(
@@ -191,7 +195,9 @@ class SchemaBuilder:
                 IndexDefinition(
                     fields=column_names,
                     type="btree",
-                    name=connection.schema_editor()._unique_constraint_name(model._meta.db_table, column_names, quote=False),
+                    name=self.simplify_generated_name(
+                        connection.schema_editor()._unique_constraint_name(model._meta.db_table, column_names, quote=False)
+                    ),
                     unique=True,
                 )
             )
@@ -257,10 +263,14 @@ class SchemaBuilder:
         return f"Unknown ({db['ENGINE']})"
 
     def qualify_table_name(self, table_name: str) -> str:
-        cleaned_name = table_name.replace('"', "").replace("'", "")
-        if "." not in cleaned_name:
-            return f"public.{cleaned_name}"
-        return cleaned_name
+        return table_name.replace('"', "").replace("'", "")
+
+    def simplify_generated_name(self, name: str) -> str:
+        normalized_name = str(name)
+        match = AUTO_GENERATED_NAME_PATTERN.fullmatch(normalized_name)
+        if match is None:
+            return normalized_name
+        return f"{match.group('prefix')}{match.group('suffix')}"
 
     def get_dbml_field_type(self, field: Field) -> str:
         db_parameters = field.db_parameters(connection)

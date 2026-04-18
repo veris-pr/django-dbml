@@ -68,7 +68,7 @@ Generate DBML for a single model:
 python manage.py dbml billing.Invoice
 ```
 
-By default, the generated DBML uses physical table names such as `public.account_emailconfirmation` so the output stays close to Django's actual schema.
+By default, the generated DBML uses physical table names such as `account_emailconfirmation` so the output stays close to Django's actual schema.
 
 When you target a specific app or model, `django-dbml` also includes the forward-related tables needed to keep the schema usable.
 
@@ -182,12 +182,12 @@ Project "Library" {
   Last Updated At 03-30-2026 02:15PM UTC'''
 }
 
-Table public.library_book {
+Table library_book {
   title varchar(200) [not null]
   author_id bigint [not null]
 }
 
-ref: public.library_book.author_id > public.library_author.id
+ref: library_book.author_id > library_author.id
 ```
 
 The exact output depends on your models, database backend, indexes, choices, and comments.
